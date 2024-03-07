@@ -1,0 +1,4 @@
+# asyncio # in-built
+httpx[http2]
+numpy
+pandas
