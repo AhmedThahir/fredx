@@ -1,15 +1,15 @@
+import asyncio
+from aiolimiter import AsyncLimiter
+import httpx
 import numpy as np
 import pandas as pd
-
-import httpx
-import asyncio
 
 class Fred:
   def __init__(self, API_KEY):
     self.set_api_key(API_KEY)
 
     self.URL_BASE = 'https://api.stlouisfed.org/'
-    
+
     self.params = dict(
         api_key = API_KEY,
         file_type = "json",
@@ -20,10 +20,12 @@ class Fred:
 
     self.create_client()
 
+    self.create_limiter()
+
     self.series_data_id_list = []
 
-  def __del__(self):
-      self.delete_client()
+  async def __del__(self):
+      await self.delete_client()
 
   def set_api_key(self, API_KEY):
     self.API_KEY = API_KEY
@@ -37,18 +39,27 @@ class Fred:
     if hasattr(self, "client") and not self.client.is_closed:
       await self.client.aclose()
 
+  def create_limiter(self):
+    self.limiter = AsyncLimiter(
+      10, # asynchronous requests
+      10   # delay in s
+    )
+
+
   async def get_series_single(
       self,
       series_id,
-      start_date = "2000-01-01",
-      end_date = "2001-01-01"
+      start_date = None,
+      end_date = None,
+      **kwargs
   ):
     try:
       response_json = await self.get_data(
           'fred/series/observations',
           series_id = series_id,
           observation_start = start_date,
-          observation_end = end_date
+          observation_end = end_date,
+          **kwargs
       )
 
       response_data = response_json["observations"]
@@ -91,25 +102,29 @@ class Fred:
     params.update(
         **kwargs
     )
-    response = await self.client.get(
-        self.URL_BASE + ENDPOINT,
-        params=self.params
-    )
+
+    async with self.limiter:
+      response = await self.client.get(
+          self.URL_BASE + ENDPOINT,
+          params=self.params
+      )
 
     return response.json()
 
 
   async def get_series_list(
       self,
-      tags = []
+      tags = [],
+      **kwargs
   ):
-    
+
     try:
       response_json = await self.get_data(
           'fred/tags/series',
-          tag_names = ";".join(tags)
+          tag_names = ";".join(tags),
+          **kwargs
       )
-     
+
       response_data = response_json["seriess"]
 
       if len(response_data) == 0:
@@ -121,26 +136,33 @@ class Fred:
 
     except Exception as e:
       print(str(e))
-      
-      return None
 
-  async def get_series_thread(self, series_id):
-    series_data = await self.get_series_single(series_id)
+      return (
+          pd.DataFrame()
+      )
+
+  async def get_series_thread(self, series_id, **kwargs):
+    series_data = await self.get_series_single(series_id, **kwargs)
     return (series_id, series_data)
 
   async def get_series(
       self,
-      series_id_list
+      series_id_list,
+      **kwargs
   ):
 
     tasks = []
 
     for series_id in series_id_list:
-        tasks.append(asyncio.create_task(self.get_series_thread(series_id)))
+        tasks.append(asyncio.create_task(self.get_series_thread(series_id, **kwargs)))
 
     self.series_data_id_list = await asyncio.gather(*tasks)
 
-    return pd.DataFrame({
-        series_id :
-        series_data for series_id, series_data in self.series_data_id_list
-    })
+    try:
+      return pd.DataFrame({
+          series_id :
+          series_data for series_id, series_data in self.series_data_id_list
+      })
+    except Exception as e:
+      print(str(e))
+      return None

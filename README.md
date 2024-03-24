@@ -1,16 +1,32 @@
-# Fred API
+# Fred eXtreme
+
+- Request multiple series with a single line
+- Fast
+- Async
+- All operations using a single http client
+
+## Installation
+
+```bash
+pip install fredx
+# or
+pip install "git+https://github.com/AhmedThahir/fredx"
+```
+
+## Import
 
 ```python
-import Fred
+from fred import Fred
 ```
 
 ## Create Object
 
 ```python
+API_KEY = ""
 fred = Fred(API_KEY)
 ```
 
-## Filter Series
+## Get list of series
 
 ```python
 series_list_df = await (
@@ -20,7 +36,6 @@ series_list_df = await (
       limit = 2
     )
 )
-series_list_df
 ```
 
 ## Get series data
@@ -31,6 +46,4 @@ series_data = await fred.get_series(
     series_id_list = series_list,
     limit = 1
 )
-
-series_data
 ```
