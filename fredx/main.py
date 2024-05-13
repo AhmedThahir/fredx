@@ -3,9 +3,10 @@ from aiolimiter import AsyncLimiter
 import httpx
 import numpy as np
 import pandas as pd
+import time
 
 class Fred:
-  def __init__(self, API_KEY):
+  def __init__(self, API_KEY, request_count=10, delay=10):
     self.set_api_key(API_KEY)
 
     self.URL_BASE = 'https://api.stlouisfed.org/'
@@ -17,6 +18,8 @@ class Fred:
         limit = 1000,
         sort_order = "asc"
     )
+    self.request_count = request_count
+    self.delay = delay
 
     self.create_client()
 
@@ -41,8 +44,8 @@ class Fred:
 
   def create_limiter(self):
     self.limiter = AsyncLimiter(
-      10, # asynchronous requests
-      10   # delay in s
+      self.request_count, # asynchronous requests
+      self.delay   # delay in s
     )
 
 
@@ -53,6 +56,7 @@ class Fred:
       end_date = None,
       **kwargs
   ):
+    print(f"Getting {series_id}")
     try:
       response_json = await self.get_data(
           'fred/series/observations',
@@ -153,8 +157,11 @@ class Fred:
 
     tasks = []
 
-    for series_id in series_id_list:
+    for i, series_id in enumerate(series_id_list):
         tasks.append(asyncio.create_task(self.get_series_thread(series_id, **kwargs)))
+        if i % self.request_count == 0:
+          # time.sleep(self.delay)
+          await asyncio.sleep(self.delay)
 
     self.series_data_id_list = await asyncio.gather(*tasks)
 
